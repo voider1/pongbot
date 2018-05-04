@@ -140,11 +140,11 @@ bool moveHead(int rotation, float angle) {
     // If angle is 0, no movement is needed
     if (abs(angle) >= 0.01) {
         if (rotation == Orientation::VERTICAL) {
-        Serial.printf("Rotating vertically for %f degrees\n", angle);
-        controller.rotate(0.0f, angle);
+            Serial.printf("Rotating vertically for %f degrees\n", angle);
+            controller.rotate(0.0f, angle);
         } else if (rotation == Orientation::HORIZONTAL) {
-        Serial.printf("Rotating horizontally for %f degrees\n", angle);
-        controller.rotate(angle, 0.0f);
+            Serial.printf("Rotating horizontally for %f degrees\n", angle);
+            controller.rotate(angle, 0.0f);
         }
         return true;
     }
@@ -190,47 +190,47 @@ void loop() {
 
         // If the page load is successful, parse and execute data
         if (httpCode == 200) {
-        String payload = http.getString();
-        Direction dir;
-        int deg;
+            String payload = http.getString();
+            Direction dir;
+            int deg;
 
-        // Serial.printf("New command: %d deg in dir %d\n", degs, dir);
+            // Serial.printf("New command: %d deg in dir %d\n", degs, dir);
 
-        processCommand(payload, dir, &deg);
+            processCommand(payload, dir, &deg);
 
-        if (dir == Direction::SHOOT) {
-            digitalWrite(SOLENOID_PIN, HIGH);
-            delay(500);
-            digitalWrite(SOLENOID_PIN, LOW);
-            return;
-        }
+            if (dir == Direction::SHOOT) {
+                digitalWrite(SOLENOID_PIN, HIGH);
+                delay(500);
+                digitalWrite(SOLENOID_PIN, LOW);
+                return;
+            }
 
-        int rotation = -1;
-        float calculatedAngle = calculateAngle(deg);
+            int rotation = -1;
+            float calculatedAngle = calculateAngle(deg);
 
-        switch (dir) {
-            case Direction::UP:
-                rotation = Orientation::VERTICAL;
-                break;
-            case Direction::DOWN:
-                rotation = Orientation::VERTICAL;
-                calculatedAngle = -calculatedAngle;
-                break;
-            case Direction::LEFT:
-                rotation = Orientation::HORIZONTAL;
-                calculatedAngle = -calculatedAngle;
-                break;
-            case Direction::RIGHT:
-                rotation = Orientation::HORIZONTAL;
-                break;
-            default:
-                calculatedAngle = 0;
-                break;
-        }
+            switch (dir) {
+                case Direction::UP:
+                    rotation = Orientation::VERTICAL;
+                    break;
+                case Direction::DOWN:
+                    rotation = Orientation::VERTICAL;
+                    calculatedAngle = -calculatedAngle;
+                    break;
+                case Direction::LEFT:
+                    rotation = Orientation::HORIZONTAL;
+                    calculatedAngle = -calculatedAngle;
+                    break;
+                case Direction::RIGHT:
+                    rotation = Orientation::HORIZONTAL;
+                    break;
+                default:
+                    calculatedAngle = 0;
+                    break;
+            }
 
-        Serial.printf("Calculated angle is %f deg\n", calculatedAngle);
+            Serial.printf("Calculated angle is %f deg\n", calculatedAngle);
 
-        moveHead(rotation, calculatedAngle);
+            moveHead(rotation, calculatedAngle);
         }
 
         http.end();
