@@ -16,7 +16,7 @@ const char* PASSWORD = "";
 const uint8_t SOLENOID_PIN = D7;
 const uint8_t HOMING_PIN   = D8;
 
-// Constants for Directions
+/// Constants for Directions
 enum class Direction {
     UP,
     DOWN,
@@ -26,14 +26,17 @@ enum class Direction {
     UNDEFINED,
 };
 
-// Orientations
+/// Possible axis orientations
 enum Orientation {
     VERTICAL = 0,
     HORIZONTAL = 1,
 };
 
+/// This is a physical property of the stepper motors used.
+/// It specifies how many steps have to be executed for a full rotation.
 const unsigned int STEPS_PER_ROT = 200;
 
+/// Struct with data containing settings for one stepper motor.
 struct motor {
     short dir, step, microsteps, rpm, accel;
 };
@@ -41,16 +44,16 @@ struct motor {
 const motor motor1 { D5, D4, 1, 60, 1000 };
 const motor motor2 { D2, D3, 1, 30, 500 };
 
-// Stepper motor 1 (horizontal)
+/// Stepper motor 1 (horizontal)
 DRV8825 stepper1(STEPS_PER_ROT, motor1.dir, motor1.step);
-// Stepper motor 2 (vertical)
+/// Stepper motor 2 (vertical)
 DRV8825 stepper2(STEPS_PER_ROT, motor2.dir, motor2.step);
 
-// Sync those bastards
+/// Sync driver is used to synchronize motion across the two axes
 SyncDriver controller(stepper1, stepper2);
 
 /// Function that checks a string argument and returns an Enum variant for it in the place
-Direction convertDirection(String dir) {
+Direction convertDirection(const String &dir) {
     if (dir == "up") {
         return Direction::UP;
     } else if (dir == "down") {
@@ -72,18 +75,19 @@ inline float calculateAngle(int degree) {
 }
 
 /// Function that extracts the Orientation and amount of degrees
-/// from the string the web server returned
-bool processCommand(String payload, Direction dir, int *deg) {
+/// from the string that the web server returned
+bool processCommand(const String &payload, Direction *dir, int *deg) {
     int commaIndex = payload.indexOf(',');
     int endString = payload.length();
     String dir_string = payload.substring(0, commaIndex);
     String deg_string = payload.substring(commaIndex + 1, endString);
-    dir = convertDirection(dir_string);
+    *dir = convertDirection(dir_string);
     *deg = static_cast<int>(deg_string.toInt());
 
     Serial.printf("New command: %d deg in dir %s\n", *deg, dir);
 }
 
+/// Connects to the WiFi network to be able to access the internet
 void wifiSetup() {
     // Set WIFI module to STA mode
     WiFi.mode(WIFI_STA);
@@ -105,6 +109,11 @@ void wifiSetup() {
     Serial.printf("[WIFI] STATION Mode, SSID: %s, IP address: %s, MAC adress: %02hX:%02hX:%02hX:%02hX:%02hX:%02hX\n", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str(), mac[5], mac[4], mac[3], mac[2], mac[1], mac[0]);
 }
 
+/**
+ * @brief This function sets up OTA firmware update.
+ *
+ * It includes a few options for hostname etc that are hardcoded inside the function
+ */
 void OTASetup() {
     // Hostname defaults to esp8266-[ChipID]
     ArduinoOTA.setHostname(HOSTNAME);
@@ -136,6 +145,7 @@ void OTASetup() {
     Serial.println("[ArduinoOTA] Server started");
 }
 
+/// This function activates the motors of pongbot to move a relative amount over a specified axis
 bool moveHead(int rotation, float angle) {
     // If angle is 0, no movement is needed
     if (abs(angle) >= 0.01) {
@@ -151,12 +161,14 @@ bool moveHead(int rotation, float angle) {
     return false;
 }
 
+/// interrupts that fires when the motors have to be stopped
 void interruptHandler() {
     // Stop vertical stepper immediately to prevent damage
     stepper2.stop();
     Serial.println("Interrupt fired, vertical stepper motor stopped");
 }
 
+/// @brief Sets up hardware interrupts that fire when the homing switches are pressed.
 void setupHomingInterrupt() {
     pinMode(HOMING_PIN, INPUT_PULLUP);
     Serial.println("[Interrupt]");
@@ -181,6 +193,7 @@ void setup() {
     digitalWrite(SOLENOID_PIN, LOW);
 }
 
+/// Main program loop
 void loop() {
     if (WiFi.status() == WL_CONNECTED) {
         HTTPClient http;
@@ -190,13 +203,16 @@ void loop() {
 
         // If the page load is successful, parse and execute data
         if (httpCode == 200) {
+            /// The data that is returned by the request to the server
             String payload = http.getString();
+            /// Holds the direction specified by the request to the server
             Direction dir;
+            /// Holds the amount of degrees to move, if appropriate
             int deg;
 
             // Serial.printf("New command: %d deg in dir %d\n", degs, dir);
 
-            processCommand(payload, dir, &deg);
+            processCommand(payload, &dir, &deg);
 
             if (dir == Direction::SHOOT) {
                 digitalWrite(SOLENOID_PIN, HIGH);
