@@ -2,6 +2,7 @@
 #include <BasicStepperDriver.h>
 #include <MultiDriver.h>
 #include <SyncDriver.h>
+#include <ArduinoJson.h>
 
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
@@ -77,14 +78,16 @@ inline float calculateAngle(int degree) {
 /// Function that extracts the Orientation and amount of degrees
 /// from the string that the web server returned
 bool processCommand(const String &payload, Direction *dir, int *deg) {
-    int commaIndex = payload.indexOf(',');
-    int endString = payload.length();
-    String dir_string = payload.substring(0, commaIndex);
-    String deg_string = payload.substring(commaIndex + 1, endString);
-    *dir = convertDirection(dir_string);
-    *deg = static_cast<int>(deg_string.toInt());
+    StaticJsonBuffer<100> jsonBuffer;
+    JsonObject& root = jsonBuffer.parseObject(payload);
 
-    Serial.printf("New command: %d deg in dir %s\n", *deg, dir);
+    if (root.success()) {
+        *dir = convertDirection(root["dir"]);
+        *deg = root["deg"]; // The library handles conversion automagically
+    } else { return false; }
+
+    Serial.printf("New command: %d deg in dir %d (%s)\n", *deg, *dir, root["dir"].as<char *>());
+    return true;
 }
 
 /// Connects to the WiFi network to be able to access the internet
