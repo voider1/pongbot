@@ -78,7 +78,10 @@ inline float calculateAngle(int degree) {
 /// Function that extracts the Orientation and amount of degrees
 /// from the string that the web server returned
 bool processCommand(const String &payload, Direction *dir, int *deg) {
-    StaticJsonBuffer<100> jsonBuffer;
+    /// The buffer stores the parsed JSON object (not the string itself).
+    // The JSON_OBJECT_SIZE calculates the size needed to store the amount of items of its argument
+    StaticJsonBuffer<JSON_OBJECT_SIZE(4)> jsonBuffer;
+    /// Reference to a location inside the buffer where the object is located with the extracted properties.
     JsonObject& root = jsonBuffer.parseObject(payload);
 
     if (root.success()) {
