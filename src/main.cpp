@@ -6,12 +6,12 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
 #include <ArduinoOTA.h>
+#include <PersWiFiManager.h>
 
 const unsigned int SERIAL_BAUDRATE = 115200;
 const char* HOSTNAME = "PongBot";
+
 const String GET_COMMAND_URL = "";
-const char* SSID = "";
-const char* PASSWORD = "";
 
 const uint8_t SOLENOID_PIN = D7;
 const uint8_t HOMING_PIN   = D8;
@@ -89,19 +89,27 @@ bool processCommand(const String &payload, Direction *dir, int *deg) {
 
 /// Connects to the WiFi network to be able to access the internet
 void wifiSetup() {
-    // Set WIFI module to STA mode
-    WiFi.mode(WIFI_STA);
+    ESP8266WebServer server(80);
+    DNSServer dnsServer;
+    PersWiFiManager WiFiManager(server, dnsServer);
 
-    // Connect
-    Serial.printf("[WIFI] Connecting to %s ", SSID);
-    WiFi.begin(SSID, PASSWORD);
+    Serial.println("[WIFI] Starting WiFiManager");
 
-    // Wait
-    while (WiFi.status() != WL_CONNECTED) {
-        Serial.print(".");
-        delay(100);
+    // Run the WiFi manager and check if it could connect
+    // if that is not the case, it will setup an AP to allow selection of another network
+    if (WiFiManager.begin(HOSTNAME)) {
+        Serial.println("[WIFI] Could not connect to previous network, setting up AP");
+        for (uint8_t i = 0; i < 120; ++i) {
+            Serial.write('.');
+            delay(1000);
+        }
+        Serial.println("[WIFI] Timeout for setting up WiFi, resetting");
+        ESP.restart();
     }
     Serial.println();
+
+    // Set WIFI module to STA mode
+    WiFi.mode(WIFI_STA);
 
     // Connected!
     byte mac[6];
