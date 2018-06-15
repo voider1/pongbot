@@ -153,6 +153,7 @@ void OTASetup() {
 
     // No authentication by default
     ArduinoOTA.setPassword("P4wnB0t");
+    ArduinoOTA.setPort(8266);
 
     ArduinoOTA.onStart([]() {
         // TODO: disable motors;
@@ -225,6 +226,8 @@ void setup() {
 
     pinMode(SOLENOID_PIN, OUTPUT);
     digitalWrite(SOLENOID_PIN, LOW);
+
+    Serial.println("Setup complete");
 }
 
 /// Main program loop
@@ -287,4 +290,5 @@ void loop() {
     }
 
     delay(1000);
+    ArduinoOTA.handle();
 }
