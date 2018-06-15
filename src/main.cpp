@@ -7,12 +7,15 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
 #include <ArduinoOTA.h>
+#define WIFI_HTM_PROGMEM
+#include <PersWiFiManager.h>
+#include <FS.h>
 
 const unsigned int SERIAL_BAUDRATE = 115200;
-const char* HOSTNAME = "PongBot";
+const char HOSTNAME[] = "PongBot";
+const char AP_NAME[] = "PongBot WiFi Setup";
+
 const String GET_COMMAND_URL = "";
-const char* SSID = "";
-const char* PASSWORD = "";
 
 const uint8_t SOLENOID_PIN = D7;
 const uint8_t HOMING_PIN   = D8;
@@ -93,21 +96,51 @@ bool processCommand(const String &payload, Direction *dir, int *deg) {
     return true;
 }
 
+ESP8266WebServer server(80);
+DNSServer dnsServer;
+PersWiFiManager WiFiManager(server, dnsServer);
+// This shouldn't be necessary with #define WIFI_HTM_PROGMEM, but that does not seem to be working.
+const char wifi_htm[] PROGMEM = R"=====(<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no"/><title>ESP WiFi</title><script>function g(i){return document.getElementById(i);};function p(t,l){if(confirm(t)) window.location=l;};function E(s){return document.createElement(s)};var S="setAttribute",A="appendChild",H="innerHTML",X,wl;function scan(){if(X) return;X=new XMLHttpRequest(),wl=document.getElementById('wl');wl[H]="Scanning...";X.onreadystatechange=function(){if (this.readyState==4&&this.status==200){X=0;wl[H]="";this.responseText.split("\n").forEach(function (e){let t=e.split(","), s=t.slice(2).join(',');var d=E('div'),i=E('a'),c=E('a');i[S]('class','s'); c[S]('class','q');i.onclick=function(){g('s').value=s;g('p').focus();};i[A](document.createTextNode(s));c[H]=t[0]+"%"+(parseInt(t[1])?"\uD83D\uDD12":"\u26A0");wl[A](i); wl[A](c);wl[A](document.createElement('br'));});}};X.open("GET","wifi/list",true);X.send();};</script><style>input{padding:5px;font-size:1em;width:95%;}body{text-align:center;font-family:verdana;background-color:black;color:white;}a{color:#1fa3ec;}button{border:0;border-radius:0.3em;background-color:#1fa3ec;color:#fff;line-height:2.4em;font-size:1.2em;width:100%;display:block;}.q{float:right;}.s{display:inline-block;width:14em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}#wl{line-height:1.5em;}</style></head><body><div style='text-align:left;display:inline-block;width:320px;padding:5px'><button onclick="scan()">&#x21bb; Scan</button><p id='wl'></p><form method='post' action='/wifi/connect'><input id='s' name='n' length=32 placeholder='SSID'><br><input id='p' name='p' length=64 type='password' placeholder='password'><br><br><button type='submit'>Connect</button></form><br><br><button onclick="p('Start WPS?','/wifi/wps')">WPS Setup</button><br><button onclick="p('Reboot device?','/wifi/rst')">Reboot</button><br><a href="javascript:history.back()">Back</a> |<a href="/">Home</a></div></body></html>)=====";
+
 /// Connects to the WiFi network to be able to access the internet
 void wifiSetup() {
-    // Set WIFI module to STA mode
-    WiFi.mode(WIFI_STA);
 
-    // Connect
-    Serial.printf("[WIFI] Connecting to %s ", SSID);
-    WiFi.begin(SSID, PASSWORD);
+    Serial.println("[WIFI] Starting WiFiManager");
 
-    // Wait
-    while (WiFi.status() != WL_CONNECTED) {
-        Serial.print(".");
-        delay(100);
+    SPIFFS.begin();
+
+    WiFiManager.onAp([](){
+        Serial.print("[WIFI] AP mode with SSID: ");
+        Serial.println(WiFiManager.getApSsid());
+    });
+    WiFiManager.setApCredentials(AP_NAME);
+
+    // Run the WiFi manager and check if it could connect
+    // if that is not the case, it will setup an AP to allow selection of another network
+    if (!WiFiManager.begin()) {
+        Serial.println("[WIFI] Could not connect to previous network, setting up AP");
+
+        // Again, this should be redundant, but alas.
+        server.on("/wifi.htm", [&]() {
+            server.send(200, "text/html", wifi_htm);
+        });
+        server.begin();
+        uint32_t looper = millis();
+        for (uint8_t i = 0; i < 120; ++i) {
+            while (millis() - looper < 1000) {
+                dnsServer.processNextRequest();
+                server.handleClient();
+                delay(1);
+            } looper = millis();
+            Serial.write('.');
+        }
+        Serial.println("[WIFI] Timeout for setting up WiFi, resetting");
+        ESP.restart();
     }
     Serial.println();
+
+    // Set WIFI module to STA mode
+    WiFi.mode(WIFI_STA);
 
     // Connected!
     byte mac[6];
@@ -126,6 +159,7 @@ void OTASetup() {
 
     // No authentication by default
     ArduinoOTA.setPassword("P4wnB0t");
+    ArduinoOTA.setPort(8266);
 
     ArduinoOTA.onStart([]() {
         // TODO: disable motors;
@@ -184,6 +218,7 @@ void setupHomingInterrupt() {
 /// Hardware setup like usual
 void setup() {
     Serial.begin(SERIAL_BAUDRATE);
+    Serial.println();
 
     stepper1.begin(motor1.rpm, motor1.microsteps);
     stepper2.begin(motor2.rpm, motor2.microsteps);
@@ -197,6 +232,8 @@ void setup() {
 
     pinMode(SOLENOID_PIN, OUTPUT);
     digitalWrite(SOLENOID_PIN, LOW);
+
+    Serial.println("Setup complete");
 }
 
 /// Main program loop
@@ -259,4 +296,5 @@ void loop() {
     }
 
     delay(1000);
+    ArduinoOTA.handle();
 }
