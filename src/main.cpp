@@ -20,6 +20,10 @@ const String GET_COMMAND_URL = "";
 const uint8_t SOLENOID_PIN = D7;
 const uint8_t HOMING_PIN   = D8;
 
+const float PULLEY_RATIO = 3.75f;
+const float limit_x = 40 * PULLEY_RATIO; // TODO: check if this fits
+float position_x = 0.0; // As we have no homing mechanism yet. Slightly dangerous.
+
 /// Constants for Directions
 enum class Direction {
     UP,
@@ -76,7 +80,7 @@ Direction convertDirection(const String &dir) {
 
 /// Tiny calculation to correct for the pulley ratio
 inline float calculateAngle(int degree) {
-    return degree * 3.75f;
+    return degree * PULLEY_RATIO;
 }
 
 /// Function that extracts the Orientation and amount of degrees
@@ -195,7 +199,17 @@ bool moveHead(int rotation, float angle) {
     if (abs(angle) >= 0.01) {
         if (rotation == Orientation::VERTICAL) {
             Serial.printf("Rotating vertically for %.3f degrees\n", angle);
+            
+            // Implement a gueard to make sure the bot does not kill itself.
+            if (position_x + angle > limit_x) {
+                angle = limit_x - position_x;
+                Serial.printf("[WARN] Angle limited by MAX to %.3f degrees", angle);
+            } else if (position_x + angle < 0) {
+                angle = -position_x;
+                Serial.printf("[WARN] Angle limited by MIN to %.3f degrees", angle);
+            }
             controller.rotate(0.0f, angle);
+            position_x += angle;
             return true;
         } else if (rotation == Orientation::HORIZONTAL) {
             Serial.printf("Rotating horizontally for %.3f degrees\n", angle);
