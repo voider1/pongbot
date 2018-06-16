@@ -19,6 +19,10 @@ const String GET_COMMAND_URL = "";
 
 const uint8_t SOLENOID_PIN = D7;
 const uint8_t HOMING_PIN   = D8;
+const uint8_t LDR_PIN      = A0;
+
+const uint32_t BALL_TIMEOUT = 2000;
+const uint8_t BALL_DETECTION_THRESHOLD = 512; // TODO: Check actual values
 
 /// Constants for Directions
 enum class Direction {
@@ -278,8 +282,20 @@ void loop() {
 
             if (dir == Direction::SHOOT) {
                 digitalWrite(SOLENOID_PIN, HIGH);
-                delay(500);
+                Serial.println("[shoot] solenoid ON");
+                const uint32_t solenoid_start = millis();
+                uint16_t LDR_val = static_cast<auto>(analogRead(LDR_PIN));
+                while (LDR_val > BALL_DETECTION_THRESHOLD && millis() < solenoid_start + BALL_TIMEOUT) {
+                    Serial.printf("[shoot] analog value = %u", LDR_val);
+                    delay(10);
+                }
+                Serial.println("[shoot] over threshold ball must be passing");
+                while (LDR_val < BALL_DETECTION_THRESHOLD && millis() < solenoid_start + BALL_TIMEOUT) {
+                    Serial.printf("[shoot] analog value = %u", LDR_val);
+                    delay(10);
+                }
                 digitalWrite(SOLENOID_PIN, LOW);
+                Serial.println("[shoot] Solenoid OFF");
                 return;
             }
 
