@@ -58,6 +58,7 @@ SyncDriver controller(stepper1, stepper2);
 
 /// Function that checks a string argument and returns an Enum variant for it in the place
 Direction convertDirection(const String &dir) {
+    Serial.println("Converting direction");
     if (dir == "up") {
         return Direction::UP;
     } else if (dir == "down") {
@@ -87,12 +88,15 @@ bool processCommand(const String &payload, Direction *dir, int *deg) {
     /// Reference to a location inside the buffer where the object is located with the extracted properties.
     JsonObject& root = jsonBuffer.parseObject(payload);
 
+    Serial.println("[JSON] Parsed object");
+
     if (root.success()) {
-        *dir = convertDirection(root["dir"]);
-        *deg = root["deg"]; // The library handles conversion automagically
+        *dir = convertDirection(root["direction"]); // Defaults to '' if not found which is converted to Direction::UNDEFINED
+        Serial.println("Setting degrees");
+        *deg = root["degrees"];                     // The library handles conversion automagically. Default is 0.0
     } else { return false; }
 
-    Serial.printf("New command: %d deg in dir %d (%s)\n", *deg, *dir, root["dir"].as<char *>());
+    Serial.printf("[JSON] New command: %d deg in dir %d (%s)\n", *deg, *dir, root["direction"].as<char *>());
     return true;
 }
 
@@ -190,14 +194,16 @@ bool moveHead(int rotation, float angle) {
     // If angle is 0, no movement is needed
     if (abs(angle) >= 0.01) {
         if (rotation == Orientation::VERTICAL) {
-            Serial.printf("Rotating vertically for %f degrees\n", angle);
+            Serial.printf("Rotating vertically for %.3f degrees\n", angle);
             controller.rotate(0.0f, angle);
+            return true;
         } else if (rotation == Orientation::HORIZONTAL) {
-            Serial.printf("Rotating horizontally for %f degrees\n", angle);
+            Serial.printf("Rotating horizontally for %.3f degrees\n", angle);
             controller.rotate(angle, 0.0f);
+            return true;
         }
-        return true;
     }
+    // If the angle is 0 or the direction is undefined the motors will not move.
     return false;
 }
 
@@ -227,8 +233,8 @@ void setup() {
     stepper2.setSpeedProfile(stepper2.LINEAR_SPEED, motor2.accel, motor2.accel);
 
     // Setup WiFi and Over The Air firmware update
-    wifiSetup();
     OTASetup();
+    wifiSetup();
 
     pinMode(SOLENOID_PIN, OUTPUT);
     digitalWrite(SOLENOID_PIN, LOW);
@@ -238,24 +244,37 @@ void setup() {
 
 /// Main program loop
 void loop() {
+    // Handle on top so a fault in the code won't stop us from uploading new code so easily
+    ArduinoOTA.handle();
+
     if (WiFi.status() == WL_CONNECTED) {
         HTTPClient http;
 
         http.begin(GET_COMMAND_URL);
         int httpCode = http.GET();
 
-        // If the page load is successful, parse and execute data
+        // If the page load is successful and there is a command, parse and execute data.
+        // If there is no command, 204 is returned.
         if (httpCode == 200) {
+            Serial.println("Successful command request");
+
             /// The data that is returned by the request to the server
             String payload = http.getString();
+
+            Serial.println("Acquired payload string:");
+            Serial.println(payload);
+
             /// Holds the direction specified by the request to the server
             Direction dir;
-            /// Holds the amount of degrees to move, if appropriate
+            /// Holds the amount of degrees to move, if applicable
             int deg;
 
             // Serial.printf("New command: %d deg in dir %d\n", degs, dir);
 
-            processCommand(payload, &dir, &deg);
+            if (!processCommand(payload, &dir, &deg)) {
+                Serial.println("Command parsing unsuccessful");
+                goto waitLabel;
+            }
 
             if (dir == Direction::SHOOT) {
                 digitalWrite(SOLENOID_PIN, HIGH);
@@ -287,7 +306,7 @@ void loop() {
                     break;
             }
 
-            Serial.printf("Calculated angle is %f deg\n", calculatedAngle);
+            Serial.printf("Calculated angle is %.3f deg\n", calculatedAngle);
 
             moveHead(rotation, calculatedAngle);
         }
@@ -295,6 +314,5 @@ void loop() {
         http.end();
     }
 
-    delay(1000);
-    ArduinoOTA.handle();
+    waitLabel: delay(1000);
 }
